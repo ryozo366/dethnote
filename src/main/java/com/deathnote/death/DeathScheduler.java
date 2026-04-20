@@ -5,7 +5,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -79,7 +78,7 @@ public class DeathScheduler {
                 target.setSecondsOnFire(20);
                 target.hurt(target.damageSources().inFire(), Float.MAX_VALUE);
             }
-            case SUFFOCATION -> target.hurt(target.damageSources().source(DamageTypes.IN_WALL), Float.MAX_VALUE);
+            case SUFFOCATION -> target.hurt(target.damageSources().inWall(), Float.MAX_VALUE);
             case FALL -> target.hurt(target.damageSources().fall(), Float.MAX_VALUE);
             case DROWNING -> target.hurt(target.damageSources().drown(), Float.MAX_VALUE);
             case POISON -> {
