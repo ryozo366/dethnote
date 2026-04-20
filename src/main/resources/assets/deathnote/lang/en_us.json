@@ -1,0 +1,38 @@
+{
+  "itemGroup.deathnote": "Death Note",
+
+  "item.deathnote.death_note": "Death Note",
+  "item.deathnote.death_pen": "Death Pen",
+  "item.deathnote.shinigami_eyes": "Shinigami Eyes",
+  "item.deathnote.shinigami_apple": "Shinigami Apple",
+
+  "screen.deathnote.title": "DEATH NOTE",
+  "screen.deathnote.name_field": "Target name",
+  "screen.deathnote.name_hint": "Write the name...",
+  "screen.deathnote.cause": "Cause of Death",
+  "screen.deathnote.write": "Write",
+  "screen.deathnote.rule": "The human whose name is written in this note shall die.",
+
+  "tooltip.deathnote.rule1": "The human whose name is written shall die.",
+  "tooltip.deathnote.rule2": "If no cause is specified, it will be a heart attack.",
+  "tooltip.deathnote.rule3": "After writing the name, death occurs in 40 seconds.",
+  "tooltip.deathnote.rule4": "Requires a Death Pen to write.",
+  "tooltip.deathnote.owner": "Bound to: %s",
+  "tooltip.deathnote.entries": "Names written: %s",
+
+  "tooltip.deathnote.pen": "A jet-black pen. Required to write in the Death Note.",
+
+  "tooltip.deathnote.eyes1": "Grants the Shinigami vision.",
+  "tooltip.deathnote.eyes2": "Right-click to toggle. Half your remaining years is the price.",
+  "tooltip.deathnote.eyes_state_on": "Activated",
+  "tooltip.deathnote.eyes_state_off": "Dormant",
+
+  "message.deathnote.not_owner": "This notebook does not belong to you.",
+  "message.deathnote.need_pen": "You need a Death Pen to write.",
+  "message.deathnote.unknown_name": "No one by the name '%s' exists.",
+  "message.deathnote.already_written": "That name has already been claimed by the note.",
+  "message.deathnote.written": "%s — %s. Written.",
+  "message.deathnote.eyes_on": "Your eyes burn. You see the truth of mortals.",
+  "message.deathnote.eyes_off": "The Shinigami vision fades.",
+  "message.deathnote.eyes_reveal": "%s — %s years remaining"
+}

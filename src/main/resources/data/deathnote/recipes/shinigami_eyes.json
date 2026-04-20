@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ESE",
+    "SHS",
+    "ESE"
+  ],
+  "key": {
+    "E": { "item": "minecraft:ender_eye" },
+    "S": { "item": "minecraft:soul_sand" },
+    "H": { "item": "minecraft:wither_skeleton_skull" }
+  },
+  "result": {
+    "item": "deathnote:shinigami_eyes",
+    "count": 1
+  }
+}
