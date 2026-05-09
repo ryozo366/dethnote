@@ -150,26 +150,23 @@ closeBtn.Parent = header
 corner(closeBtn, 10)
 
 ----------------------------------------------------------------
--- Product buttons row
+-- Product buttons row (explicit positioning, no UIListLayout)
 ----------------------------------------------------------------
 local row = Instance.new("Frame")
-row.Size = UDim2.new(1, -24, 0, 70)
-row.Position = UDim2.new(0, 12, 0, 72)
+row.Name = "ProductRow"
+row.Size = UDim2.new(1, -24, 0, 80)
+row.Position = UDim2.new(0, 12, 0, 70)
 row.BackgroundTransparency = 1
 row.Parent = panel
 
-local rowLayout = Instance.new("UIListLayout")
-rowLayout.FillDirection = Enum.FillDirection.Horizontal
-rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-rowLayout.Padding = UDim.new(0, 8)
-rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-rowLayout.Parent = row
-
-local function makeProductButton(price, id, order)
+local function makeProductButton(price, id, index, total)
+	local count = total or 4
+	local pad = 8
 	local b = Instance.new("TextButton")
-	b.LayoutOrder = order
-	b.Size = UDim2.new(0.25, -8, 1, 0)
+	b.Name = "Buy_" .. tostring(price)
+	-- 1/count width minus padding share, positioned by index (0-based)
+	b.Size = UDim2.new(1 / count, -pad, 1, 0)
+	b.Position = UDim2.new((index - 1) / count, pad / 2, 0, 0)
 	b.BackgroundColor3 = PINK_PANEL
 	b.BorderSizePixel = 0
 	b.AutoButtonColor = true
@@ -210,7 +207,7 @@ end
 local listTitle = Instance.new("TextLabel")
 listTitle.BackgroundTransparency = 1
 listTitle.Size = UDim2.new(1, -24, 0, 26)
-listTitle.Position = UDim2.new(0, 12, 0, 156)
+listTitle.Position = UDim2.new(0, 12, 0, 160)
 listTitle.Font = Enum.Font.GothamBold
 listTitle.TextScaled = true
 listTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -329,6 +326,12 @@ panel.MouseButton1Click = nil -- block clicks bubbling? not needed for Frame
 ----------------------------------------------------------------
 -- Build product buttons
 ----------------------------------------------------------------
+print("[Donate] Building", #PRODUCTS, "product buttons")
 for i, p in ipairs(PRODUCTS) do
-	makeProductButton(p.ProductPrice, p.ProductId, i)
+	makeProductButton(p.ProductPrice, p.ProductId, i, #PRODUCTS)
+end
+
+-- Remove any duplicate ScreenGuis from previous script reloads
+for _, g in ipairs(pg:GetChildren()) do
+	if g.Name == "DonateUI" and g ~= gui then g:Destroy() end
 end
