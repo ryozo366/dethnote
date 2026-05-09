@@ -25,31 +25,65 @@ local LAVA_IMAGE_ID  = "rbxassetid://0"
 ----------------------------------------------------------------
 -- Parts
 ----------------------------------------------------------------
-local startPart  = Workspace:WaitForChild("Start")        :: BasePart
-local finishPart = Workspace:WaitForChild("Finish")       :: BasePart
-local lavaPart   = Workspace:WaitForChild("Lava")         :: BasePart
+local startPart  = Workspace:WaitForChild("Start")  :: BasePart
+local finishPart = Workspace:WaitForChild("Finish") :: BasePart
+local lavaObject = Workspace:WaitForChild("Lava")
 
-lavaPart.Anchored   = true
-lavaPart.CanCollide = false
-lavaPart.Material   = Enum.Material.SmoothPlastic
-lavaPart.Color      = Color3.fromRGB(255, 255, 255)
-lavaPart.Position   = LAVA_START_POS
+----------------------------------------------------------------
+-- Lava can be either a single BasePart or a Model. Handle both.
+----------------------------------------------------------------
+local lavaParts: {BasePart} = {}
 
--- Apply the image to all 6 faces of the lava part
+local function collectParts(inst: Instance)
+	if inst:IsA("BasePart") then
+		table.insert(lavaParts, inst)
+	end
+	for _, child in ipairs(inst:GetChildren()) do
+		collectParts(child)
+	end
+end
+collectParts(lavaObject)
+
+assert(#lavaParts > 0, "Workspace.Lava must be a BasePart or contain BaseParts")
+
 local FACES = {
 	Enum.NormalId.Top, Enum.NormalId.Bottom,
 	Enum.NormalId.Front, Enum.NormalId.Back,
 	Enum.NormalId.Left, Enum.NormalId.Right,
 }
-for _, face in ipairs(FACES) do
-	local existing = lavaPart:FindFirstChild("LavaDecal_" .. face.Name)
-	if existing then existing:Destroy() end
-	local decal = Instance.new("Decal")
-	decal.Name    = "LavaDecal_" .. face.Name
-	decal.Texture = LAVA_IMAGE_ID
-	decal.Face    = face
-	decal.Parent  = lavaPart
+for _, p in ipairs(lavaParts) do
+	p.Anchored   = true
+	p.CanCollide = false
+	for _, face in ipairs(FACES) do
+		local existing = p:FindFirstChild("LavaDecal_" .. face.Name)
+		if existing then existing:Destroy() end
+		local decal = Instance.new("Decal")
+		decal.Name    = "LavaDecal_" .. face.Name
+		decal.Texture = LAVA_IMAGE_ID
+		decal.Face    = face
+		decal.Parent  = p
+	end
 end
+
+-- Compute initial pivot/position in a way that supports both Part and Model.
+local function getLavaPivot(): CFrame
+	if lavaObject:IsA("BasePart") then
+		return lavaObject.CFrame
+	elseif lavaObject:IsA("Model") then
+		return lavaObject:GetPivot()
+	end
+	return CFrame.new(LAVA_START_POS)
+end
+
+local function setLavaPivot(cf: CFrame)
+	if lavaObject:IsA("BasePart") then
+		(lavaObject :: BasePart).CFrame = cf
+	elseif lavaObject:IsA("Model") then
+		(lavaObject :: Model):PivotTo(cf)
+	end
+end
+
+setLavaPivot(CFrame.new(LAVA_START_POS))
 
 ----------------------------------------------------------------
 -- Remotes
@@ -147,7 +181,7 @@ local lavaY = LAVA_START_Y
 
 local function placeLava(y: number)
 	lavaY = y
-	lavaPart.Position = Vector3.new(LAVA_START_POS.X, y, LAVA_START_POS.Z)
+	setLavaPivot(CFrame.new(LAVA_START_POS.X, y, LAVA_START_POS.Z))
 end
 
 local function resetLava()
@@ -174,9 +208,9 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 ----------------------------------------------------------------
--- Lava kills players
+-- Lava kills players (connect to every constituent part)
 ----------------------------------------------------------------
-lavaPart.Touched:Connect(function(hit)
+local function onLavaTouched(hit: BasePart)
 	local char = hit:FindFirstAncestorOfClass("Model")
 	if not char then return end
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -184,7 +218,10 @@ lavaPart.Touched:Connect(function(hit)
 	if humanoid and player and humanoid.Health > 0 then
 		humanoid.Health = 0
 	end
-end)
+end
+for _, p in ipairs(lavaParts) do
+	p.Touched:Connect(onLavaTouched)
+end
 
 ----------------------------------------------------------------
 -- Touch debounce
