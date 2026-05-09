@@ -53,14 +53,32 @@ local GetLeader    = makeRemote("GetLeader",    "RemoteFunction") :: RemoteFunct
 ----------------------------------------------------------------
 -- Parts (accepts either "Finish" or legacy "Ziel")
 ----------------------------------------------------------------
+local function trim(s: string): string
+	return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
 local function findPart(name: string, fallback: string?): Instance
+	-- 1. exact match
 	local p = Workspace:FindFirstChild(name)
 	if not p and fallback then p = Workspace:FindFirstChild(fallback) end
+	-- 2. tolerant: trim + case-insensitive comparison against every child
 	if not p then
-		-- last resort: yield, but warn so the dev knows
-		warn(("[LavaRun] Workspace.%s not found yet, waiting..."):format(name))
-		p = Workspace:WaitForChild(name, 10)
-		if not p and fallback then p = Workspace:WaitForChild(fallback, 10) end
+		local target  = name:lower()
+		local target2 = fallback and fallback:lower() or nil
+		for _, child in ipairs(Workspace:GetChildren()) do
+			local n = trim(child.Name):lower()
+			if n == target or (target2 and n == target2) then
+				p = child
+				warn(("[LavaRun] Matched '%s' loosely to Workspace.%s"):format(name, child.Name))
+				break
+			end
+		end
+	end
+	-- 3. last resort: yield briefly
+	if not p then
+		warn(("[LavaRun] Workspace.%s not found, waiting..."):format(name))
+		p = Workspace:WaitForChild(name, 5)
+		if not p and fallback then p = Workspace:WaitForChild(fallback, 5) end
 	end
 	assert(p, "[LavaRun] Could not find Workspace." .. name .. " (or " .. tostring(fallback) .. ")")
 	return p
