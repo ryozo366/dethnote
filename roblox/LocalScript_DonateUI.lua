@@ -8,8 +8,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
 
+local PRODUCTS = {
+	{ ProductPrice = 10,  ProductId = 3589242520 },
+	{ ProductPrice = 20,  ProductId = 3589242795 },
+	{ ProductPrice = 50,  ProductId = 3589242932 },
+	{ ProductPrice = 100, ProductId = 3589243022 },
+}
+
 local remotes = ReplicatedStorage:WaitForChild("LavaRunRemotes")
-local DonateProducts = remotes:WaitForChild("DonateProducts")
 local DonatorsUpdate = remotes:WaitForChild("DonatorsUpdate")
 local GetDonators    = remotes:WaitForChild("GetDonators")
 local PromptDonate   = remotes:WaitForChild("PromptDonate")
@@ -282,7 +288,7 @@ end
 
 local function render(list)
 	for _, c in ipairs(scroll:GetChildren()) do
-		if c:IsA("Frame") then c:Destroy() end
+		if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
 	end
 	if not list or #list == 0 then
 		local empty = Instance.new("TextLabel")
@@ -321,12 +327,8 @@ backdrop.MouseButton1Click:Connect(close)
 panel.MouseButton1Click = nil -- block clicks bubbling? not needed for Frame
 
 ----------------------------------------------------------------
--- Build product buttons (server is source of truth)
+-- Build product buttons
 ----------------------------------------------------------------
-task.spawn(function()
-	local ok, products = pcall(function() return DonateProducts:InvokeServer() end)
-	if not ok or typeof(products) ~= "table" then return end
-	for i, p in ipairs(products) do
-		makeProductButton(p.ProductPrice, p.ProductId, i)
-	end
-end)
+for i, p in ipairs(PRODUCTS) do
+	makeProductButton(p.ProductPrice, p.ProductId, i)
+end
