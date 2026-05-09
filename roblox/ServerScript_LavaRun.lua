@@ -112,16 +112,21 @@ local FACES = {
 	Enum.NormalId.Left, Enum.NormalId.Right,
 }
 for _, p in ipairs(lavaParts) do
-	p.Anchored   = true
-	p.CanCollide = false
-	for _, face in ipairs(FACES) do
-		local existing = p:FindFirstChild("LavaDecal_" .. face.Name)
-		if existing then existing:Destroy() end
-		local decal = Instance.new("Decal")
-		decal.Name    = "LavaDecal_" .. face.Name
-		decal.Texture = LAVA_IMAGE_ID
-		decal.Face    = face
-		decal.Parent  = p
+	pcall(function() p.Anchored   = true end)
+	pcall(function() p.CanCollide = false end)
+	if LAVA_IMAGE_ID ~= "rbxassetid://0" then
+		for _, face in ipairs(FACES) do
+			local existing = p:FindFirstChild("LavaDecal_" .. face.Name)
+			if existing then existing:Destroy() end
+			local ok = pcall(function()
+				local decal = Instance.new("Decal")
+				decal.Name    = "LavaDecal_" .. face.Name
+				decal.Texture = LAVA_IMAGE_ID
+				decal.Face    = face
+				decal.Parent  = p
+			end)
+			if not ok then warn("[LavaRun] failed to add decal to", p:GetFullName()) end
+		end
 	end
 end
 
@@ -143,7 +148,7 @@ local function setLavaPivot(cf: CFrame)
 	end
 end
 
-setLavaPivot(CFrame.new(LAVA_START_POS))
+pcall(function() setLavaPivot(CFrame.new(LAVA_START_POS)) end)
 
 ----------------------------------------------------------------
 -- DataStore: Top times
@@ -310,6 +315,7 @@ end
 for _, p in ipairs(startParts) do
 	p.Touched:Connect(onStartTouched)
 end
+print("[LavaRun] Start.Touched connected on", #startParts, "part(s)")
 
 local function onFinishTouched(hit: BasePart)
 	local char = hit:FindFirstAncestorOfClass("Model")
