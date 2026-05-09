@@ -1,35 +1,55 @@
 --!strict
--- Place in: ServerScriptService
--- Requires Workspace parts named: Start, Ziel, Lava
--- Enable HTTP/Studio API access? Not needed. Enable "Allow API Services" in Game Settings -> Security for DataStore.
+-- Place in: ServerScriptService (as a Script)
+-- Required Workspace parts: "Start", "Finish", "Lava"
+-- Enable in Game Settings -> Security: "Enable Studio Access to API Services" (for DataStore)
 
-local Players          = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService       = game:GetService("RunService")
-local DataStoreService = game:GetService("DataStoreService")
-local Workspace        = game:GetService("Workspace")
+local RunService        = game:GetService("RunService")
+local DataStoreService  = game:GetService("DataStoreService")
+local Workspace         = game:GetService("Workspace")
 
 ----------------------------------------------------------------
 -- Config
 ----------------------------------------------------------------
-local LAVA_SPEED   = 5.5      -- studs per second
-local LAVA_START_Y = -45.984
-local LAVA_STOP_Y  = 180
+local LAVA_SPEED     = 5.5         -- studs per second
+local LAVA_START_Y   = -45.984
+local LAVA_STOP_Y    = 180
 local LAVA_START_POS = Vector3.new(13.676, LAVA_START_Y, 62.35)
-local TOP_LIMIT    = 100
+local TOP_LIMIT      = 100
+
+-- Replace this asset ID with the image you uploaded to Roblox
+-- (Create -> Decals -> upload the picture, then copy the asset id).
+local LAVA_IMAGE_ID  = "rbxassetid://0"
 
 ----------------------------------------------------------------
 -- Parts
 ----------------------------------------------------------------
-local startPart = Workspace:WaitForChild("Start")
-local zielPart  = Workspace:WaitForChild("Ziel")
-local lavaPart  = Workspace:WaitForChild("Lava")
+local startPart  = Workspace:WaitForChild("Start")        :: BasePart
+local finishPart = Workspace:WaitForChild("Finish")       :: BasePart
+local lavaPart   = Workspace:WaitForChild("Lava")         :: BasePart
 
-lavaPart.Anchored      = true
-lavaPart.CanCollide    = false
-lavaPart.Material      = Enum.Material.CrackedLava
-lavaPart.Color         = Color3.fromRGB(255, 80, 0)
-lavaPart.Position      = LAVA_START_POS
+lavaPart.Anchored   = true
+lavaPart.CanCollide = false
+lavaPart.Material   = Enum.Material.SmoothPlastic
+lavaPart.Color      = Color3.fromRGB(255, 255, 255)
+lavaPart.Position   = LAVA_START_POS
+
+-- Apply the image to all 6 faces of the lava part
+local FACES = {
+	Enum.NormalId.Top, Enum.NormalId.Bottom,
+	Enum.NormalId.Front, Enum.NormalId.Back,
+	Enum.NormalId.Left, Enum.NormalId.Right,
+}
+for _, face in ipairs(FACES) do
+	local existing = lavaPart:FindFirstChild("LavaDecal_" .. face.Name)
+	if existing then existing:Destroy() end
+	local decal = Instance.new("Decal")
+	decal.Name    = "LavaDecal_" .. face.Name
+	decal.Texture = LAVA_IMAGE_ID
+	decal.Face    = face
+	decal.Parent  = lavaPart
+end
 
 ----------------------------------------------------------------
 -- Remotes
@@ -51,27 +71,23 @@ local function makeRemote(name: string, class: string): Instance
 	return r
 end
 
-local TimerStart   = makeRemote("TimerStart",   "RemoteEvent") :: RemoteEvent
-local TimerStop    = makeRemote("TimerStop",    "RemoteEvent") :: RemoteEvent
-local TimerReset   = makeRemote("TimerReset",   "RemoteEvent") :: RemoteEvent
-local Finished     = makeRemote("Finished",     "RemoteEvent") :: RemoteEvent
-local LeaderUpdate = makeRemote("LeaderUpdate", "RemoteEvent") :: RemoteEvent
+local TimerStart   = makeRemote("TimerStart",   "RemoteEvent")    :: RemoteEvent
+local TimerStop    = makeRemote("TimerStop",    "RemoteEvent")    :: RemoteEvent
+local TimerReset   = makeRemote("TimerReset",   "RemoteEvent")    :: RemoteEvent
+local Finished     = makeRemote("Finished",     "RemoteEvent")    :: RemoteEvent
+local LeaderUpdate = makeRemote("LeaderUpdate", "RemoteEvent")    :: RemoteEvent
 local GetLeader    = makeRemote("GetLeader",    "RemoteFunction") :: RemoteFunction
 
 ----------------------------------------------------------------
 -- DataStore: Top times
 ----------------------------------------------------------------
-local store = DataStoreService:GetOrderedDataStore("LavaRunTopTimes_v1")
+local store     = DataStoreService:GetOrderedDataStore("LavaRunTopTimes_v1")
 local nameStore = DataStoreService:GetDataStore("LavaRunNames_v1")
-
--- Ordered store stores numbers; lower time = better. We store as integer
--- (ms) and sort ascending by negating into a "score" so GetSortedAsync
--- descending shows best first. Easier: store ms and read ascending.
 
 local function loadTop(): {{name: string, ms: number}}
 	local result = {}
 	local ok, pages = pcall(function()
-		return store:GetSortedAsync(true, TOP_LIMIT) -- ascending = lowest first
+		return store:GetSortedAsync(true, TOP_LIMIT) -- ascending: lowest time first
 	end)
 	if not ok or not pages then return result end
 	local page = pages:GetCurrentPage()
@@ -87,8 +103,7 @@ local function loadTop(): {{name: string, ms: number}}
 end
 
 local function broadcastLeader()
-	local top = loadTop()
-	LeaderUpdate:FireAllClients(top)
+	LeaderUpdate:FireAllClients(loadTop())
 end
 
 GetLeader.OnServerInvoke = function(_player)
@@ -98,7 +113,6 @@ end
 local function submitTime(player: Player, ms: number)
 	local key = tostring(player.UserId)
 	pcall(function() nameStore:SetAsync(key, player.Name) end)
-	-- Only overwrite if better (lower) than existing
 	local ok, prev = pcall(function() return store:GetAsync(key) end)
 	if ok and typeof(prev) == "number" and prev <= ms then return end
 	pcall(function() store:SetAsync(key, ms) end)
@@ -125,25 +139,20 @@ local function getOrCreateRun(p: Player): RunState
 	return r
 end
 
-local function teleportToStart(player: Player)
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if hrp then
-		hrp.CFrame = startPart.CFrame + Vector3.new(0, 5, 0)
-	end
-end
-
 ----------------------------------------------------------------
 -- Lava logic
 ----------------------------------------------------------------
 local lavaActive = false
 local lavaY = LAVA_START_Y
 
+local function placeLava(y: number)
+	lavaY = y
+	lavaPart.Position = Vector3.new(LAVA_START_POS.X, y, LAVA_START_POS.Z)
+end
+
 local function resetLava()
 	lavaActive = false
-	lavaY = LAVA_START_Y
-	lavaPart.Position = Vector3.new(LAVA_START_POS.X, LAVA_START_Y, LAVA_START_POS.Z)
+	placeLava(LAVA_START_Y)
 end
 
 local function anyRunActive(): boolean
@@ -155,12 +164,12 @@ end
 
 RunService.Heartbeat:Connect(function(dt)
 	if not lavaActive then return end
-	if lavaY < LAVA_STOP_Y then
-		lavaY = math.min(LAVA_STOP_Y, lavaY + LAVA_SPEED * dt)
-		lavaPart.Position = Vector3.new(LAVA_START_POS.X, lavaY, LAVA_START_POS.Z)
-	end
 	if not anyRunActive() then
 		resetLava()
+		return
+	end
+	if lavaY < LAVA_STOP_Y then
+		placeLava(math.min(LAVA_STOP_Y, lavaY + LAVA_SPEED * dt))
 	end
 end)
 
@@ -172,58 +181,85 @@ lavaPart.Touched:Connect(function(hit)
 	if not char then return end
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
 	local player = Players:GetPlayerFromCharacter(char)
-	if humanoid and player then
+	if humanoid and player and humanoid.Health > 0 then
 		humanoid.Health = 0
 	end
 end)
 
 ----------------------------------------------------------------
--- Touch handlers
+-- Touch debounce
 ----------------------------------------------------------------
-local touchDebounce: {[Player]: number} = {}
-
+local touchDebounce: {[string]: number} = {}
 local function debounced(player: Player, key: string): boolean
-	local now = tick()
-	local k = key .. tostring(player.UserId)
-	if touchDebounce[k :: any] and now - touchDebounce[k :: any] < 0.5 then return false end
-	touchDebounce[k :: any] = now
+	local k = key .. "_" .. tostring(player.UserId)
+	local now = os.clock()
+	if touchDebounce[k] and now - touchDebounce[k] < 0.5 then return false end
+	touchDebounce[k] = now
 	return true
 end
 
+----------------------------------------------------------------
+-- End run helper (called on death OR when leaving)
+----------------------------------------------------------------
+local function endRunDeath(player: Player)
+	local r = runs[player]
+	if not r or not r.active then return end
+	r.active = false
+	r.died   = true
+	TimerReset:FireClient(player)
+	-- if no other player is running, reset lava immediately
+	if not anyRunActive() then
+		resetLava()
+	end
+end
+
+----------------------------------------------------------------
+-- Touch handlers
+----------------------------------------------------------------
 startPart.Touched:Connect(function(hit)
 	local char = hit:FindFirstAncestorOfClass("Model")
 	if not char then return end
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return end
 	if not debounced(player, "start") then return end
 
 	local r = getOrCreateRun(player)
 	if r.active then return end
-	r.active = true
-	r.died = false
-	r.startTime = tick()
+
+	-- Always reset lava when a fresh run starts (handles post-death restart)
+	resetLava()
+
+	r.active    = true
+	r.died      = false
+	r.startTime = os.clock()
 
 	lavaActive = true
 	TimerStart:FireClient(player)
 end)
 
-zielPart.Touched:Connect(function(hit)
+finishPart.Touched:Connect(function(hit)
 	local char = hit:FindFirstAncestorOfClass("Model")
 	if not char then return end
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
-	if not debounced(player, "ziel") then return end
+	if not debounced(player, "finish") then return end
 
-	local r = getOrCreateRun(player)
-	if not r.active or r.died then return end
+	local r = runs[player]
+	if not r or not r.active or r.died then return end
 
-	local elapsed = tick() - r.startTime
+	local elapsed = os.clock() - r.startTime
 	local ms = math.floor(elapsed * 1000)
 	r.active = false
 
 	TimerStop:FireClient(player, ms)
 	Finished:FireClient(player, ms)
 	submitTime(player, ms)
+
+	if not anyRunActive() then
+		resetLava()
+	end
 end)
 
 ----------------------------------------------------------------
@@ -232,11 +268,12 @@ end)
 local function bindCharacter(player: Player, char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
-		local r = getOrCreateRun(player)
-		if r.active then
-			r.active = false
-			r.died = true
-			TimerReset:FireClient(player)
+		endRunDeath(player)
+	end)
+	-- Safety: if the character is removed for any reason during a run, end it.
+	char.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			endRunDeath(player)
 		end
 	end)
 end
@@ -244,17 +281,22 @@ end
 Players.PlayerAdded:Connect(function(player)
 	getOrCreateRun(player)
 	if player.Character then bindCharacter(player, player.Character) end
-	player.CharacterAdded:Connect(function(c) bindCharacter(player, c) end)
-	-- send current leaderboard
+	player.CharacterAdded:Connect(function(c)
+		-- New character spawn = always make sure their timer is cleared
+		local r = getOrCreateRun(player)
+		r.active = false
+		r.died   = false
+		TimerReset:FireClient(player)
+		bindCharacter(player, c)
+	end)
 	task.delay(2, function()
-		local top = loadTop()
-		LeaderUpdate:FireClient(player, top)
+		LeaderUpdate:FireClient(player, loadTop())
 	end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+	endRunDeath(player)
 	runs[player] = nil
 end)
 
--- initial broadcast
 task.spawn(broadcastLeader)

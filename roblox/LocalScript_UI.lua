@@ -151,6 +151,18 @@ TimerReset.OnClientEvent:Connect(function()
 	timerLabel.TextColor3 = Color3.fromRGB(180, 60, 80)
 end)
 
+-- Client-side safety: if our character dies, stop the local timer immediately
+local function bindCharacter(char)
+	local humanoid = char:WaitForChild("Humanoid")
+	humanoid.Died:Connect(function()
+		stopTimer()
+		timerLabel.Text = "00:00.000"
+		timerLabel.TextColor3 = Color3.fromRGB(180, 60, 80)
+	end)
+end
+if player.Character then bindCharacter(player.Character) end
+player.CharacterAdded:Connect(bindCharacter)
+
 ----------------------------------------------------------------
 -- Leaderboard panel
 ----------------------------------------------------------------
@@ -191,6 +203,7 @@ title.Font = Enum.Font.GothamBlack
 title.TextScaled = true
 title.TextColor3 = WHITE
 title.Text = "TOP 100 TIMES"
+title.Name = "Title"
 title.Parent = header
 stroke(title, PINK_TEXT, 1)
 
@@ -285,7 +298,7 @@ local function renderTop(top)
 		empty.Font = Enum.Font.Gotham
 		empty.TextScaled = true
 		empty.TextColor3 = PINK_DARK
-		empty.Text = "Noch keine Zeiten — sei die/der Erste!"
+		empty.Text = "No times yet - be the first!"
 		empty.Parent = scroll
 		return
 	end
