@@ -23,11 +23,52 @@ local TOP_LIMIT      = 100
 local LAVA_IMAGE_ID  = "rbxassetid://0"
 
 ----------------------------------------------------------------
--- Parts
+-- Remotes (created FIRST so the LocalScript can find them
+-- even if something below errors)
 ----------------------------------------------------------------
-local startPart  = Workspace:WaitForChild("Start")  :: BasePart
-local finishPart = Workspace:WaitForChild("Finish") :: BasePart
-local lavaObject = Workspace:WaitForChild("Lava")
+local remotes = ReplicatedStorage:FindFirstChild("LavaRunRemotes")
+if not remotes then
+	remotes = Instance.new("Folder")
+	remotes.Name = "LavaRunRemotes"
+	remotes.Parent = ReplicatedStorage
+end
+
+local function makeRemote(name: string, class: string): Instance
+	local r = remotes:FindFirstChild(name)
+	if not r then
+		r = Instance.new(class)
+		r.Name = name
+		r.Parent = remotes
+	end
+	return r
+end
+
+local TimerStart   = makeRemote("TimerStart",   "RemoteEvent")    :: RemoteEvent
+local TimerStop    = makeRemote("TimerStop",    "RemoteEvent")    :: RemoteEvent
+local TimerReset   = makeRemote("TimerReset",   "RemoteEvent")    :: RemoteEvent
+local Finished     = makeRemote("Finished",     "RemoteEvent")    :: RemoteEvent
+local LeaderUpdate = makeRemote("LeaderUpdate", "RemoteEvent")    :: RemoteEvent
+local GetLeader    = makeRemote("GetLeader",    "RemoteFunction") :: RemoteFunction
+
+----------------------------------------------------------------
+-- Parts (accepts either "Finish" or legacy "Ziel")
+----------------------------------------------------------------
+local function findPart(name: string, fallback: string?): Instance
+	local p = Workspace:FindFirstChild(name)
+	if not p and fallback then p = Workspace:FindFirstChild(fallback) end
+	if not p then
+		-- last resort: yield, but warn so the dev knows
+		warn(("[LavaRun] Workspace.%s not found yet, waiting..."):format(name))
+		p = Workspace:WaitForChild(name, 10)
+		if not p and fallback then p = Workspace:WaitForChild(fallback, 10) end
+	end
+	assert(p, "[LavaRun] Could not find Workspace." .. name .. " (or " .. tostring(fallback) .. ")")
+	return p
+end
+
+local startPart  = findPart("Start")          :: BasePart
+local finishPart = findPart("Finish", "Ziel") :: BasePart
+local lavaObject = findPart("Lava")
 
 ----------------------------------------------------------------
 -- Lava can be either a single BasePart or a Model. Handle both.
@@ -84,33 +125,6 @@ local function setLavaPivot(cf: CFrame)
 end
 
 setLavaPivot(CFrame.new(LAVA_START_POS))
-
-----------------------------------------------------------------
--- Remotes
-----------------------------------------------------------------
-local remotes = ReplicatedStorage:FindFirstChild("LavaRunRemotes")
-if not remotes then
-	remotes = Instance.new("Folder")
-	remotes.Name = "LavaRunRemotes"
-	remotes.Parent = ReplicatedStorage
-end
-
-local function makeRemote(name: string, class: string): Instance
-	local r = remotes:FindFirstChild(name)
-	if not r then
-		r = Instance.new(class)
-		r.Name = name
-		r.Parent = remotes
-	end
-	return r
-end
-
-local TimerStart   = makeRemote("TimerStart",   "RemoteEvent")    :: RemoteEvent
-local TimerStop    = makeRemote("TimerStop",    "RemoteEvent")    :: RemoteEvent
-local TimerReset   = makeRemote("TimerReset",   "RemoteEvent")    :: RemoteEvent
-local Finished     = makeRemote("Finished",     "RemoteEvent")    :: RemoteEvent
-local LeaderUpdate = makeRemote("LeaderUpdate", "RemoteEvent")    :: RemoteEvent
-local GetLeader    = makeRemote("GetLeader",    "RemoteFunction") :: RemoteFunction
 
 ----------------------------------------------------------------
 -- DataStore: Top times
