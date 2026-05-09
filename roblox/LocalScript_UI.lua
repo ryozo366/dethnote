@@ -16,6 +16,36 @@ local LeaderUpdate = remotes:WaitForChild("LeaderUpdate")
 local GetLeader    = remotes:WaitForChild("GetLeader")
 
 ----------------------------------------------------------------
+-- Hide other players' lava clones (per-player lava system)
+----------------------------------------------------------------
+local function hideIfNotMine(inst)
+	if inst:IsA("BasePart") then
+		local owner = inst:GetAttribute("OwnerUserId")
+		if typeof(owner) == "number" and owner ~= player.UserId then
+			inst.LocalTransparencyModifier = 1
+			for _, decal in ipairs(inst:GetChildren()) do
+				if decal:IsA("Decal") or decal:IsA("Texture") then
+					decal.Transparency = 1
+				end
+			end
+		end
+	end
+end
+
+local function processLavaContainer(container: Instance)
+	for _, d in ipairs(container:GetDescendants()) do
+		hideIfNotMine(d)
+	end
+	container.DescendantAdded:Connect(hideIfNotMine)
+end
+
+local lavaFolder = workspace:FindFirstChild("LavaClones")
+if lavaFolder then processLavaContainer(lavaFolder) end
+workspace.ChildAdded:Connect(function(c)
+	if c.Name == "LavaClones" then processLavaContainer(c) end
+end)
+
+----------------------------------------------------------------
 -- Pastel pink palette
 ----------------------------------------------------------------
 local PINK_BG     = Color3.fromRGB(255, 228, 235) -- soft pastel pink

@@ -108,65 +108,141 @@ for _, p in ipairs(startParts)  do p.CanTouch = true end
 for _, p in ipairs(finishParts) do p.CanTouch = true end
 
 ----------------------------------------------------------------
--- Lava can be either a single BasePart or a Model. Handle both.
+-- Lava template (the original is the template that gets cloned per player)
 ----------------------------------------------------------------
-local lavaParts: {BasePart} = {}
-
-local function collectParts(inst: Instance)
-	if inst:IsA("BasePart") then
-		table.insert(lavaParts, inst)
-	end
-	for _, child in ipairs(inst:GetChildren()) do
-		collectParts(child)
-	end
-end
-collectParts(lavaObject)
-
-assert(#lavaParts > 0, "Workspace.Lava must be a BasePart or contain BaseParts")
-
 local FACES = {
 	Enum.NormalId.Top, Enum.NormalId.Bottom,
 	Enum.NormalId.Front, Enum.NormalId.Back,
 	Enum.NormalId.Left, Enum.NormalId.Right,
 }
-for _, p in ipairs(lavaParts) do
+
+local function applyDecals(part: BasePart)
+	if LAVA_IMAGE_ID == "rbxassetid://0" then return end
+	for _, face in ipairs(FACES) do
+		local existing = part:FindFirstChild("LavaDecal_" .. face.Name)
+		if existing then existing:Destroy() end
+		pcall(function()
+			local decal = Instance.new("Decal")
+			decal.Name    = "LavaDecal_" .. face.Name
+			decal.Texture = LAVA_IMAGE_ID
+			decal.Face    = face
+			decal.Parent  = part
+		end)
+	end
+end
+
+-- Hide the original (it serves only as the template / shape source)
+local templateParts: {BasePart} = {}
+do
+	local function collect(inst: Instance)
+		if inst:IsA("BasePart") then table.insert(templateParts, inst) end
+		for _, child in ipairs(inst:GetChildren()) do collect(child) end
+	end
+	collect(lavaObject)
+end
+assert(#templateParts > 0, "Workspace.Lava must be a BasePart or contain BaseParts")
+for _, p in ipairs(templateParts) do
 	pcall(function() p.Anchored   = true end)
 	pcall(function() p.CanCollide = false end)
-	if LAVA_IMAGE_ID ~= "rbxassetid://0" then
-		for _, face in ipairs(FACES) do
-			local existing = p:FindFirstChild("LavaDecal_" .. face.Name)
-			if existing then existing:Destroy() end
-			local ok = pcall(function()
-				local decal = Instance.new("Decal")
-				decal.Name    = "LavaDecal_" .. face.Name
-				decal.Texture = LAVA_IMAGE_ID
-				decal.Face    = face
-				decal.Parent  = p
-			end)
-			if not ok then warn("[LavaRun] failed to add decal to", p:GetFullName()) end
-		end
+	pcall(function() p.CanTouch   = false end)
+	pcall(function() p.Transparency = 1 end)
+end
+
+-- Folder to hold all per-player lava clones
+local lavaFolder = Workspace:FindFirstChild("LavaClones")
+if not lavaFolder then
+	lavaFolder = Instance.new("Folder")
+	lavaFolder.Name = "LavaClones"
+	lavaFolder.Parent = Workspace
+end
+
+----------------------------------------------------------------
+-- Per-player lava state
+----------------------------------------------------------------
+type PlayerLava = {
+	root: Instance,        -- the cloned Part or Model
+	parts: {BasePart},
+	y: number,
+	active: boolean,
+}
+
+local lavas: {[Player]: PlayerLava} = {}
+
+local function setLavaPivot(root: Instance, cf: CFrame)
+	if root:IsA("BasePart") then
+		(root :: BasePart).CFrame = cf
+	elseif root:IsA("Model") then
+		(root :: Model):PivotTo(cf)
 	end
 end
 
--- Compute initial pivot/position in a way that supports both Part and Model.
-local function getLavaPivot(): CFrame
-	if lavaObject:IsA("BasePart") then
-		return lavaObject.CFrame
-	elseif lavaObject:IsA("Model") then
-		return lavaObject:GetPivot()
-	end
-	return CFrame.new(LAVA_START_POS)
+local function placeLavaY(state: PlayerLava, y: number)
+	state.y = y
+	setLavaPivot(state.root, CFrame.new(LAVA_START_POS.X, y, LAVA_START_POS.Z))
 end
 
-local function setLavaPivot(cf: CFrame)
-	if lavaObject:IsA("BasePart") then
-		(lavaObject :: BasePart).CFrame = cf
-	elseif lavaObject:IsA("Model") then
-		(lavaObject :: Model):PivotTo(cf)
+local function resetLavaFor(player: Player)
+	local s = lavas[player]
+	if not s then return end
+	s.active = false
+	placeLavaY(s, LAVA_START_Y)
+end
+
+local function createLavaFor(player: Player)
+	if lavas[player] then return end
+
+	-- Clone, then re-enable visibility/collision-free settings on the clone
+	local clone = lavaObject:Clone()
+	clone.Name = "Lava_" .. tostring(player.UserId)
+	clone:SetAttribute("OwnerUserId", player.UserId)
+	clone.Parent = lavaFolder
+
+	local parts: {BasePart} = {}
+	local function collect(inst: Instance)
+		if inst:IsA("BasePart") then table.insert(parts, inst) end
+		for _, child in ipairs(inst:GetChildren()) do collect(child) end
+	end
+	collect(clone)
+
+	for _, p in ipairs(parts) do
+		p:SetAttribute("OwnerUserId", player.UserId)
+		pcall(function() p.Anchored     = true end)
+		pcall(function() p.CanCollide   = false end)
+		pcall(function() p.CanTouch     = true end)
+		pcall(function() p.Transparency = 0 end)
+		applyDecals(p)
+	end
+
+	local state: PlayerLava = {
+		root   = clone,
+		parts  = parts,
+		y      = LAVA_START_Y,
+		active = false,
+	}
+	lavas[player] = state
+	placeLavaY(state, LAVA_START_Y)
+
+	-- Touch only kills the owning player
+	for _, p in ipairs(parts) do
+		p.Touched:Connect(function(hit)
+			local char = hit:FindFirstAncestorOfClass("Model")
+			if not char then return end
+			local hitPlayer = Players:GetPlayerFromCharacter(char)
+			if hitPlayer ~= player then return end
+			local humanoid = char:FindFirstChildOfClass("Humanoid")
+			if humanoid and humanoid.Health > 0 then
+				humanoid.Health = 0
+			end
+		end)
 	end
 end
 
-pcall(function() setLavaPivot(CFrame.new(LAVA_START_POS)) end)
+local function destroyLavaFor(player: Player)
+	local s = lavas[player]
+	if not s then return end
+	pcall(function() s.root:Destroy() end)
+	lavas[player] = nil
+end
 
 ----------------------------------------------------------------
 -- DataStore: Top times
@@ -230,54 +306,22 @@ local function getOrCreateRun(p: Player): RunState
 end
 
 ----------------------------------------------------------------
--- Lava logic
+-- Lava heartbeat (per player)
 ----------------------------------------------------------------
-local lavaActive = false
-local lavaY = LAVA_START_Y
-
-local function placeLava(y: number)
-	lavaY = y
-	setLavaPivot(CFrame.new(LAVA_START_POS.X, y, LAVA_START_POS.Z))
-end
-
-local function resetLava()
-	lavaActive = false
-	placeLava(LAVA_START_Y)
-end
-
-local function anyRunActive(): boolean
-	for _, r in pairs(runs) do
-		if r.active then return true end
-	end
-	return false
-end
-
 RunService.Heartbeat:Connect(function(dt)
-	if not lavaActive then return end
-	if not anyRunActive() then
-		resetLava()
-		return
-	end
-	if lavaY < LAVA_STOP_Y then
-		placeLava(math.min(LAVA_STOP_Y, lavaY + LAVA_SPEED * dt))
+	for player, s in pairs(lavas) do
+		local r = runs[player]
+		if r and r.active then
+			if s.y < LAVA_STOP_Y then
+				placeLavaY(s, math.min(LAVA_STOP_Y, s.y + LAVA_SPEED * dt))
+			end
+		else
+			if s.y > LAVA_START_Y then
+				placeLavaY(s, LAVA_START_Y)
+			end
+		end
 	end
 end)
-
-----------------------------------------------------------------
--- Lava kills players (connect to every constituent part)
-----------------------------------------------------------------
-local function onLavaTouched(hit: BasePart)
-	local char = hit:FindFirstAncestorOfClass("Model")
-	if not char then return end
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
-	local player = Players:GetPlayerFromCharacter(char)
-	if humanoid and player and humanoid.Health > 0 then
-		humanoid.Health = 0
-	end
-end
-for _, p in ipairs(lavaParts) do
-	p.Touched:Connect(onLavaTouched)
-end
 
 ----------------------------------------------------------------
 -- Touch debounce
@@ -292,7 +336,7 @@ local function debounced(player: Player, key: string): boolean
 end
 
 ----------------------------------------------------------------
--- End run helper (called on death OR when leaving)
+-- End run on death / leave
 ----------------------------------------------------------------
 local function endRunDeath(player: Player)
 	local r = runs[player]
@@ -300,10 +344,7 @@ local function endRunDeath(player: Player)
 	r.active = false
 	r.died   = true
 	TimerReset:FireClient(player)
-	-- if no other player is running, reset lava immediately
-	if not anyRunActive() then
-		resetLava()
-	end
+	resetLavaFor(player)
 end
 
 ----------------------------------------------------------------
@@ -322,11 +363,13 @@ local function onStartTouched(hit: BasePart)
 	local r = getOrCreateRun(player)
 	if r.active then return end
 
-	resetLava()
+	-- Make sure this player has a lava clone, then reset only theirs
+	createLavaFor(player)
+	resetLavaFor(player)
+
 	r.active    = true
 	r.died      = false
 	r.startTime = os.clock()
-	lavaActive = true
 	print("[LavaRun] Run started for", player.Name)
 	TimerStart:FireClient(player)
 end
@@ -354,9 +397,7 @@ local function onFinishTouched(hit: BasePart)
 	Finished:FireClient(player, ms)
 	submitTime(player, ms)
 
-	if not anyRunActive() then
-		resetLava()
-	end
+	resetLavaFor(player)
 end
 for _, p in ipairs(finishParts) do
 	p.Touched:Connect(onFinishTouched)
@@ -380,13 +421,14 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	getOrCreateRun(player)
+	createLavaFor(player)
 	if player.Character then bindCharacter(player, player.Character) end
 	player.CharacterAdded:Connect(function(c)
-		-- New character spawn = always make sure their timer is cleared
 		local r = getOrCreateRun(player)
 		r.active = false
 		r.died   = false
 		TimerReset:FireClient(player)
+		resetLavaFor(player)
 		bindCharacter(player, c)
 	end)
 	task.delay(2, function()
@@ -396,7 +438,13 @@ end)
 
 Players.PlayerRemoving:Connect(function(player)
 	endRunDeath(player)
+	destroyLavaFor(player)
 	runs[player] = nil
 end)
+
+-- Pre-create lavas for any players already in (script reloaded mid-game)
+for _, p in ipairs(Players:GetPlayers()) do
+	createLavaFor(p)
+end
 
 task.spawn(broadcastLeader)
