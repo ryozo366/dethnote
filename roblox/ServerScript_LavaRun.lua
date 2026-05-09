@@ -66,9 +66,28 @@ local function findPart(name: string, fallback: string?): Instance
 	return p
 end
 
-local startPart  = findPart("Start")          :: BasePart
-local finishPart = findPart("Finish", "Ziel") :: BasePart
-local lavaObject = findPart("Lava")
+local startObject  = findPart("Start")
+local finishObject = findPart("Finish", "Ziel")
+local lavaObject   = findPart("Lava")
+
+print("[LavaRun] Start =", startObject:GetFullName(), "ClassName:", startObject.ClassName)
+print("[LavaRun] Finish =", finishObject:GetFullName(), "ClassName:", finishObject.ClassName)
+print("[LavaRun] Lava =", lavaObject:GetFullName(), "ClassName:", lavaObject.ClassName)
+
+local function collectBaseParts(inst: Instance): {BasePart}
+	local out: {BasePart} = {}
+	if inst:IsA("BasePart") then table.insert(out, inst) end
+	for _, d in ipairs(inst:GetDescendants()) do
+		if d:IsA("BasePart") then table.insert(out, d) end
+	end
+	return out
+end
+
+local startParts  = collectBaseParts(startObject)
+local finishParts = collectBaseParts(finishObject)
+print("[LavaRun] Start has", #startParts, "BaseParts; Finish has", #finishParts)
+for _, p in ipairs(startParts)  do p.CanTouch = true end
+for _, p in ipairs(finishParts) do p.CanTouch = true end
 
 ----------------------------------------------------------------
 -- Lava can be either a single BasePart or a Model. Handle both.
@@ -267,7 +286,8 @@ end
 ----------------------------------------------------------------
 -- Touch handlers
 ----------------------------------------------------------------
-startPart.Touched:Connect(function(hit)
+local function onStartTouched(hit: BasePart)
+	print("[LavaRun] Start touched by", hit:GetFullName())
 	local char = hit:FindFirstAncestorOfClass("Model")
 	if not char then return end
 	local player = Players:GetPlayerFromCharacter(char)
@@ -279,18 +299,19 @@ startPart.Touched:Connect(function(hit)
 	local r = getOrCreateRun(player)
 	if r.active then return end
 
-	-- Always reset lava when a fresh run starts (handles post-death restart)
 	resetLava()
-
 	r.active    = true
 	r.died      = false
 	r.startTime = os.clock()
-
 	lavaActive = true
+	print("[LavaRun] Run started for", player.Name)
 	TimerStart:FireClient(player)
-end)
+end
+for _, p in ipairs(startParts) do
+	p.Touched:Connect(onStartTouched)
+end
 
-finishPart.Touched:Connect(function(hit)
+local function onFinishTouched(hit: BasePart)
 	local char = hit:FindFirstAncestorOfClass("Model")
 	if not char then return end
 	local player = Players:GetPlayerFromCharacter(char)
@@ -303,6 +324,7 @@ finishPart.Touched:Connect(function(hit)
 	local elapsed = os.clock() - r.startTime
 	local ms = math.floor(elapsed * 1000)
 	r.active = false
+	print("[LavaRun] Finish for", player.Name, "in", ms, "ms")
 
 	TimerStop:FireClient(player, ms)
 	Finished:FireClient(player, ms)
@@ -311,7 +333,10 @@ finishPart.Touched:Connect(function(hit)
 	if not anyRunActive() then
 		resetLava()
 	end
-end)
+end
+for _, p in ipairs(finishParts) do
+	p.Touched:Connect(onFinishTouched)
+end
 
 ----------------------------------------------------------------
 -- Death handling
